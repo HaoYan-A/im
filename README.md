@@ -77,11 +77,47 @@ Because the backend is plain Git, you get versioning, diffs, rollback, offline u
 - **Git-native** — human-readable files, meaningful commits, easy to inspect and edit by hand.
 - **Zero server** — nothing to host; GitHub is the only remote.
 
+## Repository layout
+
+When `im` connects to a repository it adds this layout (existing files are never overwritten):
+
+```
+README.md            how the repository is organized, plus tips
+mcp/                 MCP server definitions, one JSON file per server
+skills/              reusable skills, one folder per skill with a SKILL.md
+memory/
+  index.md           bookmark index of every memory, read first by agents
+  personal/          global memories about you
+  project/<name>/    memories for a single project
+```
+
+The local copy lives in `~/.im/repos/<owner>/<repo>`.
+
+## Getting started (macOS)
+
+Requirements: macOS 13 or later, Xcode 15 or later (or the Swift toolchain), and git.
+
+```sh
+cd apps/macos
+scripts/build-app.sh          # builds apps/macos/build/im.app
+open build/im.app
+```
+
+A cat appears in the menu bar. On first launch `im` asks you to:
+
+1. **Sign in to GitHub**, either by reusing an existing [GitHub CLI](https://cli.github.com) login or by pasting a personal access token with the `repo` scope. The token is stored in the macOS Keychain.
+2. **Create a new private repository** or **pick an existing private one**. Public repositories are refused.
+
+`im` then clones it, adds the layout above, and pushes.
+
+For development, `swift run` starts the app straight from the package and `swift test` runs the tests.
+
 ## Roadmap
 
-- [ ] Project scaffolding (macOS + Windows)
-- [ ] GitHub sign-in and private repository connect / create
-- [ ] Repository layout spec for memories, skills, MCP and docs
+- [x] macOS menu bar app
+- [x] GitHub sign-in and private repository connect / create
+- [x] Repository layout for memories, skills and MCP
+- [ ] Windows app
 - [ ] Local clone + background sync (pull / commit / push)
 - [ ] Agent adapters (starting with Claude Code)
 - [ ] MCP config rendering per agent
