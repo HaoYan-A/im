@@ -31,15 +31,7 @@ public enum RepoSetupError: LocalizedError {
 
 /// Clones a memory repository (or reuses an existing clone), adds the im layout and pushes it.
 public struct RepoSetup: Sendable {
-    public struct Identity: Sendable {
-        public let name: String
-        public let email: String
-
-        public init(name: String, email: String) {
-            self.name = name
-            self.email = email
-        }
-    }
+    public typealias Identity = GitIdentity
 
     public struct Result: Sendable {
         /// Paths added by the scaffold; empty when the repository was already initialized.
@@ -93,7 +85,7 @@ public struct RepoSetup: Sendable {
             return Result(created: [], pushed: false)
         }
 
-        try ensureIdentity()
+        try git.ensureIdentity(in: localPath, fallback: fallbackIdentity)
         try git.run(["add", "--"] + created, in: localPath)
         try git.run(["commit", "--quiet", "-m", "chore(im): initialize repository layout"], in: localPath)
         log(L("Pushing to GitHub…", "正在推送到 GitHub…"))
@@ -128,15 +120,6 @@ public struct RepoSetup: Sendable {
 
     private func resolves(_ ref: String) -> Bool {
         (try? git.run(["rev-parse", "--verify", "--quiet", ref], in: localPath)) != nil
-    }
-
-    private func ensureIdentity() throws {
-        if (try? git.run(["config", "user.name"], in: localPath)) == nil {
-            try git.run(["config", "user.name", fallbackIdentity.name], in: localPath)
-        }
-        if (try? git.run(["config", "user.email"], in: localPath)) == nil {
-            try git.run(["config", "user.email", fallbackIdentity.email], in: localPath)
-        }
     }
 
     static func sameRemote(_ a: String, _ b: String) -> Bool {

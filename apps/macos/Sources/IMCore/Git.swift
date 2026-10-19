@@ -42,6 +42,17 @@ enum Command {
     }
 }
 
+/// Who commits when git has no identity configured.
+public struct GitIdentity: Sendable, Codable, Equatable {
+    public let name: String
+    public let email: String
+
+    public init(name: String, email: String) {
+        self.name = name
+        self.email = email
+    }
+}
+
 /// Runs the system git. The GitHub token is handed over through environment-provided config,
 /// so it never ends up in a remote URL, `.git/config` or the process arguments.
 public struct Git: Sendable {
@@ -58,6 +69,16 @@ public struct Git: Sendable {
     @discardableResult
     public func run(_ arguments: [String], in directory: URL? = nil) throws -> String {
         try Command.run(executable, arguments, in: directory, environment: processEnvironment)
+    }
+
+    /// Sets the repository's commit identity from `fallback` for whatever git has no value for.
+    public func ensureIdentity(in repository: URL, fallback: GitIdentity) throws {
+        if (try? run(["config", "user.name"], in: repository)) == nil {
+            try run(["config", "user.name", fallback.name], in: repository)
+        }
+        if (try? run(["config", "user.email"], in: repository)) == nil {
+            try run(["config", "user.email", fallback.email], in: repository)
+        }
     }
 
     private var processEnvironment: [String: String] {

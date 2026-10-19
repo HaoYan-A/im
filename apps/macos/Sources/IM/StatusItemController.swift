@@ -9,13 +9,20 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private let appState: AppState
     private let preferences: Preferences
     private let showConnectWindow: () -> Void
+    private let showSkillsWindow: () -> Void
     private var animator: CatAnimator?
     private var subscriptions: Set<AnyCancellable> = []
 
-    init(appState: AppState, preferences: Preferences, showConnectWindow: @escaping () -> Void) {
+    init(
+        appState: AppState,
+        preferences: Preferences,
+        showConnectWindow: @escaping () -> Void,
+        showSkillsWindow: @escaping () -> Void
+    ) {
         self.appState = appState
         self.preferences = preferences
         self.showConnectWindow = showConnectWindow
+        self.showSkillsWindow = showSkillsWindow
         super.init()
 
         let menu = NSMenu()
@@ -42,6 +49,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             menu.addItem(.separator())
             menu.addItem(title: L("Open on GitHub", "在 GitHub 上打开"), action: #selector(openOnGitHub), target: self)
             menu.addItem(title: L("Open Local Folder", "打开本地文件夹"), action: #selector(openLocalFolder), target: self)
+            menu.addItem(.separator())
+            menu.addItem(title: L("Skills…", "Skills…"), action: #selector(skills), target: self)
             menu.addItem(.separator())
             menu.addItem(title: L("Change Repository…", "更换仓库…"), action: #selector(connect), target: self)
             menu.addItem(title: L("Disconnect", "断开连接"), action: #selector(disconnect), target: self)
@@ -119,6 +128,10 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         }
     }
 
+    @objc private func skills() {
+        showSkillsWindow()
+    }
+
     @objc private func connect() {
         showConnectWindow()
     }
@@ -134,7 +147,26 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     }
 
     @objc private func disconnect() {
-        appState.disconnect()
+        guard let name = appState.connection?.fullName else { return }
+        Task {
+            let linked = await appState.linkedSkillCount()
+            let alert = NSAlert()
+            alert.messageText = L("Disconnect from \(name)?", "断开与 \(name) 的连接？")
+            let keep = L("The repository and its local copy are not deleted.", "仓库和它的本地副本都不会被删除。")
+            alert.informativeText = linked == 0 ? keep : L(
+                "\(linked) linked skills will first be turned back into regular folders in Claude Code and Codex, so they keep working. \(keep)",
+                "会先把 \(linked) 个已关联的 Skill 在 Claude Code 和 Codex 里还原成普通文件夹，保证它们继续可用。\(keep)"
+            )
+            alert.addButton(withTitle: L("Disconnect", "断开连接"))
+            alert.addButton(withTitle: L("Cancel", "取消"))
+            NSApp.activate(ignoringOtherApps: true)
+            guard alert.runModal() == .alertFirstButtonReturn else { return }
+            do {
+                try await appState.disconnect()
+            } catch {
+                NSAlert(error: error).runModal()
+            }
+        }
     }
 }
 

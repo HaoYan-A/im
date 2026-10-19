@@ -110,3 +110,12 @@ final class CatAnimator {
         }
     }
 }
+
+extension CatSkin {
+    /// The cat's most vivid color (calico orange, ragdoll blue…), used to tint im's windows.
+    var accentColor: NSColor {
+        let colors = palette.values.map { NSColor(srgbRed: $0.red, green: $0.green, blue: $0.blue, alpha: 1) }
+        return colors.max { $0.saturationComponent * $0.brightnessComponent < $1.saturationComponent * $1.brightnessComponent }
+            ?? .controlAccentColor
+    }
+}
