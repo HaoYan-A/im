@@ -112,6 +112,18 @@ A cat appears in the menu bar. On first launch `im` asks you to:
 
 For development, `swift run` starts the app straight from the package and `swift test` runs the tests.
 
+### Pick your cat
+
+The menu bar cat comes in five breeds: **Calico** (default), **British Blue**, **Orange Tabby**, **Ragdoll** and **American Shorthair**. Choose one from the **Cat** menu.
+
+The choice is stored in `~/.im/config.json`, which `im` watches. You (or your AI agent) can switch cats by editing it:
+
+```json
+{ "cat": "ragdoll" }
+```
+
+To draw your own cat, choose **Cat → Open Cats Folder…** and add a `<id>.json` file there. A cat is pixel art: a palette plus rows of characters. The folder's README documents the format with the built-in calico as an example. New and edited cats show up immediately, and a file with a mistake is listed in the menu with the reason.
+
 ## Roadmap
 
 - [x] macOS menu bar app
