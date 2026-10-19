@@ -112,6 +112,18 @@ A cat appears in the menu bar. On first launch `im` asks you to:
 
 For development, `swift run` starts the app straight from the package and `swift test` runs the tests.
 
+### Skills
+
+`im` finds the personal skills of **Claude Code** (`~/.claude/skills`) and **Codex**, CLI and desktop app (`~/.agents/skills`, plus the legacy `~/.codex/skills`). It asks which ones to link:
+
+- A **linked** skill lives once in the repository's `skills/<name>/`. Each agent you pick gets a symlink to it, so a skill that only existed in Claude Code can also be used by Codex.
+- Copies are compared by content. Identical copies merge on their own. When they differ, you see which files differ and choose the version to keep.
+- Skills you don't link stay exactly where they are. Replaced folders are moved to `~/.im/backup/`, never deleted.
+- **Reload** (or **Skills…** in the menu) commits edits to linked skills, pulls what other machines added, pushes, and shows the list again.
+- Disconnecting or switching repositories first turns linked skills back into regular folders, so the agents keep working.
+
+> Linked skills point into the local clone under `~/.im/repos/`. Don't delete or move it while skills are linked; disconnect from the menu instead.
+
 ### Pick your cat
 
 The menu bar cat comes in five breeds: **Calico** (default), **British Blue**, **Orange Tabby**, **Ragdoll** and **American Shorthair**. Choose one from the **Cat** menu.

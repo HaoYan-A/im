@@ -136,8 +136,17 @@ final class ConnectViewModel: ObservableObject {
                     ? L("Initialized and pushed \(result.created.count) files.", "已初始化并推送 \(result.created.count) 个文件。")
                     : L("Nothing to change.", "没有需要改动的内容。"))
 
-                let connection = Connection(fullName: repo.fullName, htmlURL: repo.htmlURL, localPath: setup.localPath)
-                appState.connect(connection)
+                let connection = Connection(
+                    fullName: repo.fullName,
+                    htmlURL: repo.htmlURL,
+                    localPath: setup.localPath,
+                    identity: setup.fallbackIdentity
+                )
+                let released = try await appState.connect(connection)
+                if released > 0 {
+                    append(L("Turned \(released) skills linked to the previous repository back into regular folders.",
+                             "已把关联到上一个仓库的 \(released) 个 Skill 还原成普通文件夹。"))
+                }
                 self.connection = connection
                 step = .done
             } catch {
