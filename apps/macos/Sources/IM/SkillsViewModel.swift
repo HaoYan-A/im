@@ -146,6 +146,11 @@ final class SkillsViewModel: ObservableObject {
                     try linker.apply(changes)
                     try sync.commitAndSync(["skills", ".im"], message: "chore(im): update skills \(names)")
                 }.value
+                // Unlinking means "keep it out of im": don't tick it again or ask about it on launch.
+                let unlinked = changes.compactMap { if case .unlink = $0.action { $0.skill.name } else { nil } }
+                if !unlinked.isEmpty {
+                    try IMConfig.setSkippedSkills(skipped.union(unlinked))
+                }
                 let allLinks = changes.allSatisfy { if case .link = $0.action { true } else { false } }
                 resultMessage = allLinks
                     ? L("Linked \(changes.count) skills. Agents pick them up in new sessions.", "已关联 \(changes.count) 个 Skill，Agent 开新会话就能用。")
