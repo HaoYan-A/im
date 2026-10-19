@@ -20,7 +20,7 @@ extension CatSkin {
             }
             return true
         }
-        image.accessibilityDescription = name
+        image.accessibilityDescription = localizedName
         return image
     }
 }

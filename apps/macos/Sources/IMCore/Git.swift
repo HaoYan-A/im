@@ -7,7 +7,8 @@ public struct CommandError: LocalizedError {
 
     public var errorDescription: String? {
         let detail = output.trimmingCharacters(in: .whitespacesAndNewlines)
-        return "`\(command)` failed (exit \(status))" + (detail.isEmpty ? "" : ":\n\(detail)")
+        return L("`\(command)` failed (exit \(status))", "`\(command)` 执行失败（退出码 \(status)）")
+            + (detail.isEmpty ? "" : L(":", "：") + "\n\(detail)")
     }
 }
 

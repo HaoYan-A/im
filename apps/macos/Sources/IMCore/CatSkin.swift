@@ -6,6 +6,7 @@ import Foundation
 ///
 ///     {
 ///       "name": "Calico",
+///       "names": { "zh-Hans": "三花" },  // optional translations of "name"
 ///       "palette": { "k": "#2A211E", "w": "#FAF6F0" },
 ///       "awake": ["..kk..", ".kwwk.", ...],
 ///       "blink": [...]            // optional, same size as "awake"
@@ -21,9 +22,14 @@ public struct CatSkin: Sendable, Identifiable, Equatable {
 
     public let id: String
     public let name: String
+    /// Translated names keyed by language code, e.g. `zh-Hans`.
+    public let names: [String: String]
     public let palette: [Character: Color]
     public let awake: [String]
     public let blink: [String]?
+
+    /// The name in the current language, falling back to `name`.
+    public var localizedName: String { names[Language.current.rawValue] ?? name }
 
     public var width: Int { awake[0].count }
     public var height: Int { awake.count }
@@ -42,21 +48,22 @@ public enum CatSkinError: LocalizedError, Equatable {
     public var errorDescription: String? {
         switch self {
         case let .invalidJSON(detail):
-            "not valid cat JSON (\(detail))"
+            L("not valid cat JSON (\(detail))", "不是有效的小猫 JSON（\(detail)）")
         case .empty:
-            "\"awake\" has no rows"
+            L("\"awake\" has no rows", "\"awake\" 没有任何行")
         case let .tooLarge(width, height):
-            "\(width)×\(height) is too large, the maximum is \(CatSkin.maxWidth)×\(CatSkin.maxHeight)"
+            L("\(width)×\(height) is too large, the maximum is \(CatSkin.maxWidth)×\(CatSkin.maxHeight)",
+              "\(width)×\(height) 太大了，最大是 \(CatSkin.maxWidth)×\(CatSkin.maxHeight)")
         case let .unevenRows(frame):
-            "rows in \"\(frame)\" have different lengths"
+            L("rows in \"\(frame)\" have different lengths", "\"\(frame)\" 里的行长度不一致")
         case let .frameSizeMismatch(frame):
-            "\"\(frame)\" must be the same size as \"awake\""
+            L("\"\(frame)\" must be the same size as \"awake\"", "\"\(frame)\" 必须和 \"awake\" 一样大")
         case let .invalidPaletteKey(key):
-            "palette key \"\(key)\" must be a single character other than \".\""
+            L("palette key \"\(key)\" must be a single character other than \".\"", "调色板的键 \"\(key)\" 必须是单个字符，且不能是 \".\"")
         case let .invalidColor(key, value):
-            "palette color \"\(value)\" for \"\(key)\" is not #RRGGBB or #RRGGBBAA"
+            L("palette color \"\(value)\" for \"\(key)\" is not #RRGGBB or #RRGGBBAA", "\"\(key)\" 的颜色 \"\(value)\" 不是 #RRGGBB 或 #RRGGBBAA 格式")
         case let .unknownPixel(pixel, frame):
-            "\"\(frame)\" uses \"\(pixel)\", which is not in the palette"
+            L("\"\(frame)\" uses \"\(pixel)\", which is not in the palette", "\"\(frame)\" 用到了调色板里没有的 \"\(pixel)\"")
         }
     }
 }
@@ -64,6 +71,7 @@ public enum CatSkinError: LocalizedError, Equatable {
 extension CatSkin {
     private struct File: Decodable {
         let name: String?
+        let names: [String: String]?
         let palette: [String: String]
         let awake: [String]
         let blink: [String]?
@@ -92,7 +100,7 @@ extension CatSkin {
             }
         }
 
-        self.init(id: id, name: file.name ?? id, palette: palette, awake: file.awake, blink: file.blink)
+        self.init(id: id, name: file.name ?? id, names: file.names ?? [:], palette: palette, awake: file.awake, blink: file.blink)
     }
 
     private static func validate(_ rows: [String], frame: String, palette: [Character: Color]) throws {
@@ -110,7 +118,7 @@ extension CatSkin {
 
     private static func describe(_ error: DecodingError) -> String {
         switch error {
-        case let .keyNotFound(key, _): "missing \"\(key.stringValue)\""
+        case let .keyNotFound(key, _): L("missing \"\(key.stringValue)\"", "缺少 \"\(key.stringValue)\"")
         case let .typeMismatch(_, context), let .valueNotFound(_, context), let .dataCorrupted(context):
             context.codingPath.isEmpty
                 ? context.debugDescription

@@ -23,7 +23,8 @@ public enum RepoSetupError: LocalizedError {
     public var errorDescription: String? {
         switch self {
         case let .localPathInUse(url):
-            "\(url.path) already exists and is not a clone of this repository. Move it away and try again."
+            L("\(url.path) already exists and is not a clone of this repository. Move it away and try again.",
+              "\(url.path) 已经存在，但不是这个仓库的克隆。请把它移走后再试。")
         }
     }
 }
@@ -85,17 +86,17 @@ public struct RepoSetup: Sendable {
             }
         }
 
-        log("Creating the im layout…")
+        log(L("Creating the im layout…", "正在创建 im 目录结构…"))
         let created = try RepoScaffold.apply(at: localPath)
         guard !created.isEmpty else {
-            log("Repository is already initialized.")
+            log(L("Repository is already initialized.", "仓库已经初始化过了。"))
             return Result(created: [], pushed: false)
         }
 
         try ensureIdentity()
         try git.run(["add", "--"] + created, in: localPath)
         try git.run(["commit", "--quiet", "-m", "chore(im): initialize repository layout"], in: localPath)
-        log("Pushing to GitHub…")
+        log(L("Pushing to GitHub…", "正在推送到 GitHub…"))
         try git.run(["push", "--quiet", "-u", "origin", "HEAD"], in: localPath)
         return Result(created: created, pushed: true)
     }
@@ -107,7 +108,7 @@ public struct RepoSetup: Sendable {
             guard let origin, Self.sameRemote(origin, remoteURL.absoluteString) else {
                 throw RepoSetupError.localPathInUse(localPath)
             }
-            log("Updating the existing local copy…")
+            log(L("Updating the existing local copy…", "正在更新已有的本地副本…"))
             try git.run(["fetch", "--quiet", "origin"], in: localPath)
             let remoteHasBranches = !(try git.run(["branch", "-r"], in: localPath)).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             if remoteHasBranches {
@@ -120,7 +121,7 @@ public struct RepoSetup: Sendable {
         guard existing.allSatisfy({ $0 == ".DS_Store" }) else {
             throw RepoSetupError.localPathInUse(localPath)
         }
-        log("Cloning into \(localPath.path)…")
+        log(L("Cloning into \(localPath.path)…", "正在克隆到 \(localPath.path)…"))
         try fm.createDirectory(at: localPath.deletingLastPathComponent(), withIntermediateDirectories: true)
         try git.run(["clone", "--quiet", remoteURL.absoluteString, localPath.path])
     }

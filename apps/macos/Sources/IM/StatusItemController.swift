@@ -7,14 +7,14 @@ import IMCore
 final class StatusItemController: NSObject, NSMenuDelegate {
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let appState: AppState
-    private let catStore: CatStore
+    private let preferences: Preferences
     private let showConnectWindow: () -> Void
     private var animator: CatAnimator?
     private var subscriptions: Set<AnyCancellable> = []
 
-    init(appState: AppState, catStore: CatStore, showConnectWindow: @escaping () -> Void) {
+    init(appState: AppState, preferences: Preferences, showConnectWindow: @escaping () -> Void) {
         self.appState = appState
-        self.catStore = catStore
+        self.preferences = preferences
         self.showConnectWindow = showConnectWindow
         super.init()
 
@@ -22,13 +22,13 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         menu.delegate = self
         statusItem.menu = menu
 
-        let animator = CatAnimator(skin: catStore.skin) { [weak statusItem] image in statusItem?.button?.image = image }
+        let animator = CatAnimator(skin: preferences.cat) { [weak statusItem] image in statusItem?.button?.image = image }
         self.animator = animator
         appState.$busy.combineLatest(appState.$connection)
             .sink { busy, connection in animator.mood = busy ? .busy : (connection == nil ? .asleep : .idle) }
             .store(in: &subscriptions)
         // @Published fires before the property changes, so resolve the skin from the emitted values.
-        catStore.$library.combineLatest(catStore.$selectedID)
+        preferences.$library.combineLatest(preferences.$selectedCatID)
             .sink { library, id in animator.skin = library.resolve(id) }
             .store(in: &subscriptions)
     }
@@ -38,33 +38,34 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         menu.removeAllItems()
 
         if let connection = appState.connection {
-            menu.addItem(disabled: "Connected to \(connection.fullName)")
+            menu.addItem(disabled: L("Connected to \(connection.fullName)", "已连接到 \(connection.fullName)"))
             menu.addItem(.separator())
-            menu.addItem(title: "Open on GitHub", action: #selector(openOnGitHub), target: self)
-            menu.addItem(title: "Open Local Folder", action: #selector(openLocalFolder), target: self)
+            menu.addItem(title: L("Open on GitHub", "在 GitHub 上打开"), action: #selector(openOnGitHub), target: self)
+            menu.addItem(title: L("Open Local Folder", "打开本地文件夹"), action: #selector(openLocalFolder), target: self)
             menu.addItem(.separator())
-            menu.addItem(title: "Change Repository…", action: #selector(connect), target: self)
-            menu.addItem(title: "Disconnect", action: #selector(disconnect), target: self)
+            menu.addItem(title: L("Change Repository…", "更换仓库…"), action: #selector(connect), target: self)
+            menu.addItem(title: L("Disconnect", "断开连接"), action: #selector(disconnect), target: self)
         } else {
-            menu.addItem(disabled: appState.busy ? "Connecting…" : "Not connected")
+            menu.addItem(disabled: appState.busy ? L("Connecting…", "正在连接…") : L("Not connected", "未连接"))
             menu.addItem(.separator())
-            menu.addItem(title: "Connect Repository…", action: #selector(connect), target: self)
+            menu.addItem(title: L("Connect Repository…", "连接仓库…"), action: #selector(connect), target: self)
         }
 
         menu.addItem(.separator())
-        menu.addItem(withTitle: "Cat", action: nil, keyEquivalent: "").submenu = makeCatMenu()
+        menu.addItem(withTitle: L("Cat", "小猫"), action: nil, keyEquivalent: "").submenu = makeCatMenu()
+        menu.addItem(withTitle: L("Language", "语言"), action: nil, keyEquivalent: "").submenu = makeLanguageMenu()
         menu.addItem(.separator())
-        let quit = menu.addItem(withTitle: "Quit im", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        let quit = menu.addItem(withTitle: L("Quit im", "退出 im"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         quit.target = NSApp
     }
 
     private func makeCatMenu() -> NSMenu {
         let menu = NSMenu()
-        let library = catStore.library
-        let selected = catStore.skin.id
+        let library = preferences.library
+        let selected = preferences.cat.id
 
         func addCat(_ cat: CatSkin) {
-            let item = menu.addItem(title: cat.name, action: #selector(selectCat(_:)), target: self)
+            let item = menu.addItem(title: cat.localizedName, action: #selector(selectCat(_:)), target: self)
             item.representedObject = cat.id
             item.image = cat.image()
             item.state = cat.id == selected ? .on : .off
@@ -73,25 +74,40 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         library.builtins.forEach(addCat)
         if !library.custom.isEmpty || !library.problems.isEmpty {
             menu.addItem(.separator())
-            menu.addItem(disabled: "Custom")
+            menu.addItem(disabled: L("Custom", "自定义"))
             library.custom.forEach(addCat)
             for problem in library.problems {
                 menu.addItem(disabled: "⚠︎ \(problem.file): \(problem.message)")
             }
         }
-        if let unknown = catStore.unknownSelection {
+        if let unknown = preferences.unknownCat {
             menu.addItem(.separator())
-            menu.addItem(disabled: "⚠︎ config.json asks for unknown cat \"\(unknown)\"")
+            menu.addItem(disabled: L("⚠︎ config.json asks for unknown cat \"\(unknown)\"", "⚠︎ config.json 里的小猫 \"\(unknown)\" 不存在"))
         }
 
         menu.addItem(.separator())
-        menu.addItem(title: "Open Cats Folder…", action: #selector(openCatsFolder), target: self)
+        menu.addItem(title: L("Open Cats Folder…", "打开小猫文件夹…"), action: #selector(openCatsFolder), target: self)
+        return menu
+    }
+
+    private func makeLanguageMenu() -> NSMenu {
+        let menu = NSMenu()
+        for language in Language.allCases {
+            let item = menu.addItem(title: language.displayName, action: #selector(selectLanguage(_:)), target: self)
+            item.representedObject = language.rawValue
+            item.state = language == preferences.language ? .on : .off
+        }
         return menu
     }
 
     @objc private func selectCat(_ sender: NSMenuItem) {
         guard let id = sender.representedObject as? String else { return }
-        catStore.select(id)
+        preferences.selectCat(id)
+    }
+
+    @objc private func selectLanguage(_ sender: NSMenuItem) {
+        guard let language = (sender.representedObject as? String).flatMap(Language.init(rawValue:)) else { return }
+        preferences.selectLanguage(language)
     }
 
     @objc private func openCatsFolder() {

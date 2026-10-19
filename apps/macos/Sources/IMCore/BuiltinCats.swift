@@ -10,6 +10,7 @@ public enum BuiltinCats {
         ("calico", """
         {
           "name": "Calico",
+          "names": { "zh-Hans": "三花" },
           "palette": { "k": "#2A211E", "w": "#FAF6F0", "o": "#E88C3A", "d": "#342C2A", "g": "#8DB43C", "h": "#FFFFFF", "p": "#E896A0" },
           "awake": [
             "..kk..........kk..",
@@ -54,6 +55,7 @@ public enum BuiltinCats {
         ("blue", """
         {
           "name": "British Blue",
+          "names": { "zh-Hans": "蓝猫" },
           "palette": { "k": "#3A4250", "g": "#8A97AA", "l": "#B4BDCB", "e": "#E89A38", "h": "#FFFFFF", "p": "#C9A9B0", "n": "#6E7688" },
           "awake": [
             "..kk..........kk..",
@@ -98,6 +100,7 @@ public enum BuiltinCats {
         ("orange", """
         {
           "name": "Orange Tabby",
+          "names": { "zh-Hans": "橘猫" },
           "palette": { "k": "#4A2C18", "o": "#F2A24A", "s": "#C86E28", "w": "#FFF6EA", "e": "#9CC23C", "h": "#FFFFFF", "p": "#F09AA6" },
           "awake": [
             "..kk..........kk..",
@@ -142,6 +145,7 @@ public enum BuiltinCats {
         ("ragdoll", """
         {
           "name": "Ragdoll",
+          "names": { "zh-Hans": "布偶" },
           "palette": { "k": "#3A2820", "d": "#6E503E", "w": "#F6F0E6", "b": "#468CE6", "h": "#FFFFFF", "p": "#E896A0" },
           "awake": [
             "..kk..........kk..",
@@ -186,6 +190,7 @@ public enum BuiltinCats {
         ("american-shorthair", """
         {
           "name": "American Shorthair",
+          "names": { "zh-Hans": "美短" },
           "palette": { "k": "#26262A", "l": "#C9CDD2", "d": "#3A3A40", "w": "#F2F2F0", "e": "#7DB43A", "h": "#FFFFFF", "p": "#C87A70" },
           "awake": [
             "..kk..........kk..",

@@ -33,7 +33,7 @@ public enum TokenStore {
         let status = SecItemAdd(query as CFDictionary, nil)
         guard status == errSecSuccess else {
             throw NSError(domain: NSOSStatusErrorDomain, code: Int(status), userInfo: [
-                NSLocalizedDescriptionKey: "Could not save the token to the Keychain (\(status)).",
+                NSLocalizedDescriptionKey: L("Could not save the token to the Keychain (\(status)).", "无法把令牌保存到钥匙串（\(status)）。"),
             ])
         }
     }
