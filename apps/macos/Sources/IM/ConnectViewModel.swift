@@ -109,10 +109,10 @@ final class ConnectViewModel: ObservableObject {
                 let repo: GitHubRepo
                 switch mode {
                 case .create:
-                    append("Creating private repository \(user.login)/\(name)…")
+                    append(L("Creating private repository \(user.login)/\(name)…", "正在创建私有仓库 \(user.login)/\(name)…"))
                     repo = try await client.createPrivateRepository(
                         name: name,
-                        description: "Shared memory for my AI agents, managed by im."
+                        description: "Shared memory for my AI agents, managed by im."  // Stays English: it lives on GitHub.
                     )
                 case .existing:
                     guard let selected else { return }
@@ -132,7 +132,9 @@ final class ConnectViewModel: ObservableObject {
                     log: { [weak self] message in Task { @MainActor in self?.append(message) } }
                 )
                 let result = try await Task.detached { try setup.run() }.value
-                append(result.pushed ? "Initialized and pushed \(result.created.count) files." : "Nothing to change.")
+                append(result.pushed
+                    ? L("Initialized and pushed \(result.created.count) files.", "已初始化并推送 \(result.created.count) 个文件。")
+                    : L("Nothing to change.", "没有需要改动的内容。"))
 
                 let connection = Connection(fullName: repo.fullName, htmlURL: repo.htmlURL, localPath: setup.localPath)
                 appState.connect(connection)
@@ -170,7 +172,8 @@ enum ConnectError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case let .publicRepository(name):
-            "\(name) is public. im only works with private repositories, because memories and MCP configs can contain secrets."
+            L("\(name) is public. im only works with private repositories, because memories and MCP configs can contain secrets.",
+              "\(name) 是公开仓库。im 只使用私有仓库，因为记忆和 MCP 配置里可能有密钥。")
         }
     }
 }

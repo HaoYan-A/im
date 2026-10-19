@@ -4,6 +4,7 @@ import AppKit
 @MainActor
 enum IMApp {
     static func main() {
+        Preferences.applySavedLanguage()
         let app = NSApplication.shared
         let delegate = AppDelegate()
         app.delegate = delegate
@@ -16,13 +17,13 @@ enum IMApp {
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let appState = AppState()
-    private let catStore = CatStore()
+    private let preferences = Preferences()
     private var statusItem: StatusItemController?
     private var connectWindow: ConnectWindowController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.mainMenu = Self.makeMainMenu()
-        statusItem = StatusItemController(appState: appState, catStore: catStore) { [weak self] in self?.showConnectWindow() }
+        statusItem = StatusItemController(appState: appState, preferences: preferences) { [weak self] in self?.showConnectWindow() }
         if appState.connection == nil {
             showConnectWindow()
         }
@@ -30,7 +31,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func showConnectWindow() {
         if connectWindow == nil {
-            connectWindow = ConnectWindowController(appState: appState, catStore: catStore) { [weak self] in self?.connectWindow = nil }
+            connectWindow = ConnectWindowController(appState: appState, preferences: preferences) { [weak self] in self?.connectWindow = nil }
         }
         connectWindow?.show()
     }

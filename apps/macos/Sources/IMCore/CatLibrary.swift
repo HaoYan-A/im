@@ -76,6 +76,7 @@ public struct CatLibrary: Sendable, Equatable {
         \(CatSkin.maxWidth)×\(CatSkin.maxHeight).
 
         - `name`: shown in the menu (optional, defaults to the file name)
+        - `names`: optional translations of `name` by language code, e.g. `{ "zh-Hans": "三花" }`
         - `palette`: one-character keys mapped to `#RRGGBB` or `#RRGGBBAA` colors
         - `awake`: the cat with its eyes open
         - `blink`: optional, same size as `awake`, shown when the cat blinks or sleeps
@@ -111,10 +112,23 @@ public enum IMConfig {
         read(url)["cat"] as? String
     }
 
-    /// Sets the cat, keeping any other keys already in the file.
     public static func setCatID(_ id: String, at url: URL = url) throws {
+        try set("cat", to: id, at: url)
+    }
+
+    /// The configured language; unknown or missing values mean the default.
+    public static func language(at url: URL = url) -> Language {
+        (read(url)["language"] as? String).flatMap(Language.init(rawValue:)) ?? .default
+    }
+
+    public static func setLanguage(_ language: Language, at url: URL = url) throws {
+        try set("language", to: language.rawValue, at: url)
+    }
+
+    /// Sets one key, keeping any other keys already in the file.
+    private static func set(_ key: String, to value: String, at url: URL) throws {
         var config = read(url)
-        config["cat"] = id
+        config[key] = value
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         let data = try JSONSerialization.data(withJSONObject: config, options: [.prettyPrinted, .sortedKeys])
         try (data + Data("\n".utf8)).write(to: url, options: .atomic)

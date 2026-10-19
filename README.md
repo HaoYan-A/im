@@ -122,6 +122,12 @@ The choice is stored in `~/.im/config.json`, which `im` watches. You (or your AI
 { "cat": "ragdoll" }
 ```
 
+### Language
+
+`im` speaks **English** (default) and **Simplified Chinese**. Switch in the **Language** menu, or set `"language": "en"` or `"zh-Hans"` in `~/.im/config.json`.
+
+### Custom cats
+
 To draw your own cat, choose **Cat → Open Cats Folder…** and add a `<id>.json` file there. A cat is pixel art: a palette plus rows of characters. The folder's README documents the format with the built-in calico as an example. New and edited cats show up immediately, and a file with a mistake is listed in the menu with the reason.
 
 ## Roadmap

@@ -41,9 +41,10 @@ public enum GitHubError: LocalizedError {
     public var errorDescription: String? {
         switch self {
         case .unauthorized:
-            "GitHub rejected the token. Make sure it is valid and has the `repo` scope."
+            L("GitHub rejected the token. Make sure it is valid and has the `repo` scope.",
+              "GitHub 拒绝了这个令牌。请确认它有效，并且带有 `repo` 权限。")
         case let .api(status, message):
-            "GitHub API error \(status): \(message)"
+            L("GitHub API error \(status): \(message)", "GitHub API 错误 \(status)：\(message)")
         }
     }
 }

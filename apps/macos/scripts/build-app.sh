@@ -19,6 +19,9 @@ rm -rf "$app"
 mkdir -p "$app/Contents/MacOS"
 cp "$bin_dir/IM" "$app/Contents/MacOS/IM"
 cp Resources/Info.plist "$app/Contents/Info.plist"
+# The .lproj folders tell AppKit which languages im supports, so its own strings follow the chosen one.
+mkdir -p "$app/Contents/Resources"
+cp -R Resources/*.lproj "$app/Contents/Resources/"
 
 # Ad-hoc signature so the app runs locally; distribution builds need a Developer ID.
 codesign --force --sign - "$app"
