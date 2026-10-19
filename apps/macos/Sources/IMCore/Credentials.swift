@@ -2,9 +2,16 @@ import Foundation
 import Security
 
 /// Stores the GitHub token in the macOS Keychain.
+///
+/// The token is read from the Keychain at most once per launch: every read can make macOS ask the
+/// user for permission, so later reads come from memory.
 public enum TokenStore {
     private static let service = "io.github.haoyan-a.im"
     private static let account = "github"
+
+    private static let lock = NSLock()
+    /// nil until the Keychain has been read; then the token, or nil inside when there is none.
+    nonisolated(unsafe) private static var cached: String??
 
     private static var baseQuery: [CFString: Any] {
         [
@@ -15,6 +22,15 @@ public enum TokenStore {
     }
 
     public static func load() -> String? {
+        lock.withLock {
+            if let cached { return cached }
+            let token = readKeychain()
+            cached = .some(token)
+            return token
+        }
+    }
+
+    private static func readKeychain() -> String? {
         var query = baseQuery
         query[kSecReturnData] = true
         query[kSecMatchLimit] = kSecMatchLimitOne
@@ -31,6 +47,7 @@ public enum TokenStore {
         query[kSecValueData] = Data(token.utf8)
         query[kSecAttrAccessible] = kSecAttrAccessibleAfterFirstUnlock
         let status = SecItemAdd(query as CFDictionary, nil)
+        lock.withLock { cached = .some(status == errSecSuccess ? token : nil) }
         guard status == errSecSuccess else {
             throw NSError(domain: NSOSStatusErrorDomain, code: Int(status), userInfo: [
                 NSLocalizedDescriptionKey: L("Could not save the token to the Keychain (\(status)).", "无法把令牌保存到钥匙串（\(status)）。"),
@@ -40,6 +57,7 @@ public enum TokenStore {
 
     public static func delete() {
         SecItemDelete(baseQuery as CFDictionary)
+        lock.withLock { cached = .some(nil) }
     }
 }
 

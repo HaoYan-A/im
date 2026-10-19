@@ -112,6 +112,8 @@ A cat appears in the menu bar. On first launch `im` asks you to:
 
 For development, `swift run` starts the app straight from the package and `swift test` runs the tests.
 
+Run `apps/macos/scripts/create-dev-certificate.sh` once before your first build. It creates a local self-signed signing certificate, so the app keeps the same identity across rebuilds. Without it every rebuild is a new app to the Keychain, and macOS asks again for access to the GitHub token.
+
 ### Skills
 
 `im` finds the personal skills of **Claude Code** (`~/.claude/skills`) and **Codex**, CLI and desktop app (`~/.agents/skills`, plus the legacy `~/.codex/skills`). It asks which ones to link:

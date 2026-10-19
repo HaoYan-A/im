@@ -23,7 +23,18 @@ cp Resources/Info.plist "$app/Contents/Info.plist"
 mkdir -p "$app/Contents/Resources"
 cp -R Resources/*.lproj "$app/Contents/Resources/"
 
-# Ad-hoc signature so the app runs locally; distribution builds need a Developer ID.
-codesign --force --sign - "$app"
+# Sign with a stable identity when there is one, so the Keychain keeps trusting im across rebuilds.
+# Override with IM_CODESIGN_IDENTITY; create a local one with scripts/create-dev-certificate.sh.
+identity="${IM_CODESIGN_IDENTITY:-}"
+if [[ -z "$identity" ]] && security find-certificate -c "im Development" >/dev/null 2>&1; then
+  identity="im Development"
+fi
+if [[ -n "$identity" ]]; then
+  codesign --force --sign "$identity" "$app"
+else
+  codesign --force --sign - "$app"
+  echo "warning: ad-hoc signed; macOS will ask for Keychain access again after every rebuild." >&2
+  echo "         Run scripts/create-dev-certificate.sh once to avoid that." >&2
+fi
 
 echo "Built $(pwd)/$app"
