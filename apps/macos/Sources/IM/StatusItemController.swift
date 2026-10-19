@@ -1,17 +1,20 @@
 import AppKit
 import Combine
+import IMCore
 
 /// The cat in the menu bar and its menu.
 @MainActor
 final class StatusItemController: NSObject, NSMenuDelegate {
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let appState: AppState
+    private let catStore: CatStore
     private let showConnectWindow: () -> Void
     private var animator: CatAnimator?
-    private var subscription: AnyCancellable?
+    private var subscriptions: Set<AnyCancellable> = []
 
-    init(appState: AppState, showConnectWindow: @escaping () -> Void) {
+    init(appState: AppState, catStore: CatStore, showConnectWindow: @escaping () -> Void) {
         self.appState = appState
+        self.catStore = catStore
         self.showConnectWindow = showConnectWindow
         super.init()
 
@@ -19,11 +22,15 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         menu.delegate = self
         statusItem.menu = menu
 
-        let animator = CatAnimator { [weak statusItem] image in statusItem?.button?.image = image }
+        let animator = CatAnimator(skin: catStore.skin) { [weak statusItem] image in statusItem?.button?.image = image }
         self.animator = animator
-        subscription = appState.$busy.combineLatest(appState.$connection).sink { busy, connection in
-            animator.mood = busy ? .busy : (connection == nil ? .asleep : .idle)
-        }
+        appState.$busy.combineLatest(appState.$connection)
+            .sink { busy, connection in animator.mood = busy ? .busy : (connection == nil ? .asleep : .idle) }
+            .store(in: &subscriptions)
+        // @Published fires before the property changes, so resolve the skin from the emitted values.
+        catStore.$library.combineLatest(catStore.$selectedID)
+            .sink { library, id in animator.skin = library.resolve(id) }
+            .store(in: &subscriptions)
     }
 
     // Rebuilt on every open so it always reflects the current state.
@@ -45,8 +52,55 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         }
 
         menu.addItem(.separator())
+        menu.addItem(withTitle: "Cat", action: nil, keyEquivalent: "").submenu = makeCatMenu()
+        menu.addItem(.separator())
         let quit = menu.addItem(withTitle: "Quit im", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         quit.target = NSApp
+    }
+
+    private func makeCatMenu() -> NSMenu {
+        let menu = NSMenu()
+        let library = catStore.library
+        let selected = catStore.skin.id
+
+        func addCat(_ cat: CatSkin) {
+            let item = menu.addItem(title: cat.name, action: #selector(selectCat(_:)), target: self)
+            item.representedObject = cat.id
+            item.image = cat.image()
+            item.state = cat.id == selected ? .on : .off
+        }
+
+        library.builtins.forEach(addCat)
+        if !library.custom.isEmpty || !library.problems.isEmpty {
+            menu.addItem(.separator())
+            menu.addItem(disabled: "Custom")
+            library.custom.forEach(addCat)
+            for problem in library.problems {
+                menu.addItem(disabled: "⚠︎ \(problem.file): \(problem.message)")
+            }
+        }
+        if let unknown = catStore.unknownSelection {
+            menu.addItem(.separator())
+            menu.addItem(disabled: "⚠︎ config.json asks for unknown cat \"\(unknown)\"")
+        }
+
+        menu.addItem(.separator())
+        menu.addItem(title: "Open Cats Folder…", action: #selector(openCatsFolder), target: self)
+        return menu
+    }
+
+    @objc private func selectCat(_ sender: NSMenuItem) {
+        guard let id = sender.representedObject as? String else { return }
+        catStore.select(id)
+    }
+
+    @objc private func openCatsFolder() {
+        do {
+            try CatLibrary.prepareDirectory()
+            NSWorkspace.shared.open(IMPaths.cats)
+        } catch {
+            NSAlert(error: error).runModal()
+        }
     }
 
     @objc private func connect() {
@@ -75,9 +129,11 @@ private extension NSMenu {
         addItem(item)
     }
 
-    func addItem(title: String, action: Selector, target: AnyObject) {
+    @discardableResult
+    func addItem(title: String, action: Selector, target: AnyObject) -> NSMenuItem {
         let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
         item.target = target
         addItem(item)
+        return item
     }
 }

@@ -6,6 +6,11 @@ public enum IMPaths {
         FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".im", isDirectory: true)
     }
 
+    /// Custom menu bar cats, one `<id>.json` per cat.
+    public static var cats: URL {
+        home.appendingPathComponent("cats", isDirectory: true)
+    }
+
     /// Local clone of a memory repository, e.g. `~/.im/repos/octocat/im-memory`.
     public static func clone(of fullName: String) -> URL {
         home.appendingPathComponent("repos", isDirectory: true).appendingPathComponent(fullName, isDirectory: true)

@@ -7,7 +7,7 @@ final class ConnectWindowController: NSObject, NSWindowDelegate {
     private let window: NSWindow
     private let onClose: () -> Void
 
-    init(appState: AppState, onClose: @escaping () -> Void) {
+    init(appState: AppState, catStore: CatStore, onClose: @escaping () -> Void) {
         let model = ConnectViewModel(appState: appState)
         window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 480, height: 300),
@@ -17,7 +17,7 @@ final class ConnectWindowController: NSObject, NSWindowDelegate {
         )
         window.title = "Connect Repository"
         window.isReleasedWhenClosed = false
-        window.contentViewController = NSHostingController(rootView: ConnectView(model: model))
+        window.contentViewController = NSHostingController(rootView: ConnectView(model: model, catStore: catStore))
         self.onClose = onClose
         super.init()
         window.delegate = self
@@ -37,13 +37,12 @@ final class ConnectWindowController: NSObject, NSWindowDelegate {
 
 struct ConnectView: View {
     @ObservedObject var model: ConnectViewModel
+    @ObservedObject var catStore: CatStore
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(spacing: 14) {
-                Image(nsImage: CatSprite.awake.image(pointSize: 3))
-                    .renderingMode(.template)
-                    .foregroundStyle(.primary)
+                Image(nsImage: catStore.skin.image(pointSize: 3))
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Connect your memory").font(.title2.bold())
                     Text("im keeps memories, skills and MCP servers in a private GitHub repository.")

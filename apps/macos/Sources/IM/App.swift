@@ -16,12 +16,13 @@ enum IMApp {
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let appState = AppState()
+    private let catStore = CatStore()
     private var statusItem: StatusItemController?
     private var connectWindow: ConnectWindowController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.mainMenu = Self.makeMainMenu()
-        statusItem = StatusItemController(appState: appState) { [weak self] in self?.showConnectWindow() }
+        statusItem = StatusItemController(appState: appState, catStore: catStore) { [weak self] in self?.showConnectWindow() }
         if appState.connection == nil {
             showConnectWindow()
         }
@@ -29,7 +30,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func showConnectWindow() {
         if connectWindow == nil {
-            connectWindow = ConnectWindowController(appState: appState) { [weak self] in self?.connectWindow = nil }
+            connectWindow = ConnectWindowController(appState: appState, catStore: catStore) { [weak self] in self?.connectWindow = nil }
         }
         connectWindow?.show()
     }
