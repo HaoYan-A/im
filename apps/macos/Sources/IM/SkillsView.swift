@@ -6,25 +6,27 @@ import SwiftUI
 @MainActor
 final class SkillsWindowController: NSObject, NSWindowDelegate {
     let model: SkillsViewModel
+    let discover: DiscoverViewModel
     private let window: NSWindow
     private let onClose: () -> Void
     private var languageSubscription: AnyCancellable?
 
     init(appState: AppState, preferences: Preferences, onClose: @escaping () -> Void) {
         model = SkillsViewModel(appState: appState)
+        discover = DiscoverViewModel(skills: model, appState: appState)
         window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 720, height: 560),
             styleMask: [.titled, .closable, .resizable, .miniaturizable],
             backing: .buffered,
             defer: false
         )
-        let hosting = NSHostingController(rootView: SkillsView(model: model, preferences: preferences))
+        let hosting = NSHostingController(rootView: SkillsView(model: model, discover: discover, preferences: preferences))
         // Let the user size the window; by default the hosting controller pins it to the content's ideal size.
         hosting.sizingOptions = []
         window.contentViewController = hosting
         window.isReleasedWhenClosed = false
-        window.contentMinSize = NSSize(width: 600, height: 420)
-        window.setContentSize(NSSize(width: 720, height: 560))
+        window.contentMinSize = NSSize(width: 680, height: 460)
+        window.setContentSize(NSSize(width: 820, height: 600))
         window.setFrameAutosaveName("im.skills")
         self.onClose = onClose
         super.init()
@@ -57,6 +59,7 @@ private enum Column {
 
 struct SkillsView: View {
     @ObservedObject var model: SkillsViewModel
+    @ObservedObject var discover: DiscoverViewModel
     @ObservedObject var preferences: Preferences
 
     private var accent: Color { Color(nsColor: preferences.cat.accentColor) }
@@ -76,13 +79,18 @@ struct SkillsView: View {
                     .padding(.bottom, 10)
             }
             Divider()
-            content
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .tint(accent)
-            Divider()
-            footer
+            switch model.tab {
+            case .installed:
+                content
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .tint(accent)
+                Divider()
+                footer
+            case .discover:
+                DiscoverView(model: discover, accent: accent, strongAccent: strongAccent)
+            }
         }
-        .frame(minWidth: 600, minHeight: 420)
+        .frame(minWidth: 680, minHeight: 460)
         .background(Color(nsColor: .windowBackgroundColor))
         // Text comes from L(), which SwiftUI can't track; rebuild everything on a language switch.
         .id(preferences.language)
@@ -95,12 +103,22 @@ struct SkillsView: View {
             Image(nsImage: preferences.cat.image(pointSize: 2))
             VStack(alignment: .leading, spacing: 2) {
                 Text(L("Skills", "Skills")).font(.title3.weight(.semibold))
-                Text(L("Choose which skills im keeps in your repository, and which agents get them.",
-                       "选择哪些 Skill 交给 im 保管，以及装到哪些 Agent。"))
+                Text(model.tab == .installed
+                     ? L("Choose which skills im keeps in your repository, and which agents get them.",
+                         "选择哪些 Skill 交给 im 保管，以及装到哪些 Agent。")
+                     : L("Find skills on skills.sh. Installed skills stay up to date on their own.",
+                         "在 skills.sh 上找 Skill。装好的 Skill 会自动保持更新。"))
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
             Spacer()
+            Picker("", selection: $model.tab) {
+                Text(L("Installed", "已安装")).tag(SkillsViewModel.Tab.installed)
+                Text(L("Discover", "发现")).tag(SkillsViewModel.Tab.discover)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .fixedSize()
             if model.isWorking {
                 ProgressView().controlSize(.small).frame(width: 24)
             } else {
@@ -210,7 +228,7 @@ struct SkillsView: View {
 
     private func rows(_ skills: [Skill]) -> some View {
         ForEach(skills) { skill in
-            SkillRow(skill: skill, choice: choice(for: skill), isSkipped: model.skipped.contains(skill.name), accent: accent)
+            SkillRow(skill: skill, choice: choice(for: skill), isSkipped: model.skipped.contains(skill.name), accent: accent, model: model)
             Divider().padding(.leading, Column.inset + Column.check + Column.spacing)
         }
     }
@@ -259,6 +277,7 @@ private struct SkillRow: View {
     @Binding var choice: SkillsViewModel.Choice
     let isSkipped: Bool
     let accent: Color
+    @ObservedObject var model: SkillsViewModel
 
     private var isLinked: Bool { skill.state == .linked }
 
@@ -285,6 +304,7 @@ private struct SkillRow: View {
                         .lineLimit(2)
                         .help(description)
                 }
+                SourceLine(skill: skill, model: model, accent: accent)
                 if skill.state == .differentVersions {
                     if choice.link {
                         VersionPicker(skill: skill, selection: $choice.version)
@@ -334,7 +354,7 @@ private struct SkillRow: View {
             Badge(text: L("Different versions", "版本不同"), color: .orange)
         } else if skill.state == .onlyInIM {
             Badge(text: L("From another machine", "来自另一台电脑"), color: .secondary)
-        } else if isSkipped {
+        } else if isSkipped, !isLinked {
             Text(L("Skipped", "已跳过")).font(.caption).foregroundStyle(.tertiary)
         }
     }
@@ -434,5 +454,103 @@ private struct VersionPicker: View {
             Date.FormatStyle(date: .abbreviated, time: .shortened).locale(Locale(identifier: Language.current.rawValue))
         )
         return L("\(owners), edited \(date)", "\(owners)，修改于 \(date)")
+    }
+}
+
+/// Where a skill comes from upstream, and whether it is up to date.
+private struct SourceLine: View {
+    let skill: Skill
+    @ObservedObject var model: SkillsViewModel
+    let accent: Color
+
+    var body: some View {
+        if skill.state == .linked {
+            if let source = model.manifest.skills[skill.name]?.source {
+                tracked(source)
+            } else {
+                untracked
+            }
+        } else if let source = model.lockSources[skill.name] {
+            HStack(spacing: 4) {
+                Image(systemName: "arrow.triangle.2.circlepath")
+                Text(L("From \(source.repository). Link it and im keeps it up to date.", "来自 \(source.repository)，关联后 im 会自动更新。"))
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
+    }
+
+    private func tracked(_ source: SkillSource) -> some View {
+        HStack(spacing: 8) {
+            Link(destination: source.pageURL) {
+                Label(source.repository, systemImage: "arrow.triangle.2.circlepath")
+            }
+            .foregroundStyle(.secondary)
+            .help(L("Open on skills.sh", "在 skills.sh 打开"))
+            switch model.updateStatuses[skill.name] {
+            case .upToDate?:
+                Text(L("Up to date", "已是最新")).foregroundStyle(.tertiary)
+            case .updated?:
+                Text(L("Updated just now", "刚刚更新")).foregroundStyle(.green)
+            case .editedLocally?:
+                Text(L("Newer version upstream; you edited this copy, so it wasn't replaced.", "上游有新版本，你改过这份，所以没有自动替换。"))
+                    .foregroundStyle(.orange)
+                Button(L("Update Anyway", "仍然更新")) { model.updateAnyway(skill) }
+                    .help(L("Your edited copy goes to ~/.im/backup", "你改过的版本会移到 ~/.im/backup"))
+                Button(L("Stop Updating", "不再更新")) { model.stopTracking(skill) }
+            case .missingUpstream?:
+                Text(L("Removed upstream", "上游已删除")).foregroundStyle(.secondary)
+                Button(L("Stop Updating", "不再更新")) { model.stopTracking(skill) }
+            case let .failed(message)?:
+                Text(L("Couldn't check for updates", "检查更新失败")).foregroundStyle(.secondary).help(message)
+            case nil:
+                EmptyView()
+            }
+        }
+        .buttonStyle(.link)
+        .font(.caption)
+    }
+
+    @ViewBuilder
+    private var untracked: some View {
+        if let candidates = model.candidates[skill.name] {
+            if candidates.isEmpty {
+                Text(L("No skill with this name on skills.sh.", "skills.sh 上没有同名的 Skill。"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(L("Follow updates from:", "从这里跟踪更新：")).font(.caption.weight(.semibold))
+                    ForEach(candidates) { candidate in
+                        HStack(spacing: 8) {
+                            Link(candidate.source.repository, destination: candidate.source.pageURL)
+                            Text(L("\(DiscoverView.installs(candidate.installs)) installs", "\(DiscoverView.installs(candidate.installs)) 次安装"))
+                                .foregroundStyle(.secondary)
+                            if candidate.matchesLocal {
+                                Label(L("Same as yours", "和你的一样"), systemImage: "checkmark").foregroundStyle(accent)
+                                Button(L("Follow", "跟踪")) { model.adopt(candidate, for: skill) }
+                            } else {
+                                Text(L("Differs from yours", "和你的不同")).foregroundStyle(.secondary)
+                                Button(L("Follow and Use Theirs", "跟踪并换成上游版本")) { model.adopt(candidate, for: skill) }
+                                    .help(L("Your copy goes to ~/.im/backup", "你的版本会移到 ~/.im/backup"))
+                            }
+                        }
+                    }
+                }
+                .buttonStyle(.link)
+                .font(.caption)
+            }
+        } else if model.findingSource.contains(skill.name) {
+            HStack(spacing: 6) {
+                ProgressView().controlSize(.mini)
+                Text(L("Looking on skills.sh…", "正在 skills.sh 上查找…"))
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        } else {
+            Button(L("Find on skills.sh to get updates", "在 skills.sh 上查找来源，以便自动更新")) { model.findSource(for: skill) }
+                .buttonStyle(.link)
+                .font(.caption)
+        }
     }
 }

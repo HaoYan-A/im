@@ -9,7 +9,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private let appState: AppState
     private let preferences: Preferences
     private let showConnectWindow: () -> Void
-    private let showSkillsWindow: () -> Void
+    private let showSkillsWindow: (SkillsViewModel.Tab) -> Void
     private var animator: CatAnimator?
     private var subscriptions: Set<AnyCancellable> = []
 
@@ -17,7 +17,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         appState: AppState,
         preferences: Preferences,
         showConnectWindow: @escaping () -> Void,
-        showSkillsWindow: @escaping () -> Void
+        showSkillsWindow: @escaping (SkillsViewModel.Tab) -> Void
     ) {
         self.appState = appState
         self.preferences = preferences
@@ -51,6 +51,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             menu.addItem(title: L("Open Local Folder", "打开本地文件夹"), action: #selector(openLocalFolder), target: self)
             menu.addItem(.separator())
             menu.addItem(title: L("Skills…", "Skills…"), action: #selector(skills), target: self)
+            menu.addItem(title: L("Get Skills from skills.sh…", "从 skills.sh 获取 Skill…"), action: #selector(discoverSkills), target: self)
             menu.addItem(.separator())
             menu.addItem(title: L("Change Repository…", "更换仓库…"), action: #selector(connect), target: self)
             menu.addItem(title: L("Disconnect", "断开连接"), action: #selector(disconnect), target: self)
@@ -129,7 +130,11 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     }
 
     @objc private func skills() {
-        showSkillsWindow()
+        showSkillsWindow(.installed)
+    }
+
+    @objc private func discoverSkills() {
+        showSkillsWindow(.discover)
     }
 
     @objc private func connect() {

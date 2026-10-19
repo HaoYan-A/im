@@ -22,7 +22,11 @@ public enum TokenStore {
     }
 
     public static func load() -> String? {
-        lock.withLock {
+        #if DEBUG
+        // Design review runs a differently signed build; let it skip the Keychain entirely.
+        if let token = ProcessInfo.processInfo.environment["IM_DEBUG_GITHUB_TOKEN"] { return token }
+        #endif
+        return lock.withLock {
             if let cached { return cached }
             let token = readKeychain()
             cached = .some(token)

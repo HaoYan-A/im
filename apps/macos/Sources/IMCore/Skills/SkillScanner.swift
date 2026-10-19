@@ -59,22 +59,30 @@ public enum SkillScanner {
     static func content(of folder: URL) -> SkillContent {
         var files: [String: String] = [:]
         var modified = Date.distantPast
-        let keys: [URLResourceKey] = [.isRegularFileKey, .contentModificationDateKey]
-        let enumerator = FileManager.default.enumerator(at: folder, includingPropertiesForKeys: keys)
-        let base = folder.path.hasSuffix("/") ? folder.path : folder.path + "/"
-        while let url = enumerator?.nextObject() as? URL {
-            if ignoredNames.contains(url.lastPathComponent) {
-                enumerator?.skipDescendants()
-                continue
-            }
-            guard let values = try? url.resourceValues(forKeys: Set(keys)), values.isRegularFile == true,
-                  let data = try? Data(contentsOf: url)
-            else { continue }
-            let path = url.path.hasPrefix(base) ? String(url.path.dropFirst(base.count)) : url.lastPathComponent
-            files[path] = data.sha256
-            modified = max(modified, values.contentModificationDate ?? .distantPast)
+        for file in regularFiles(in: folder) {
+            guard let data = try? Data(contentsOf: file.url) else { continue }
+            files[file.path] = data.sha256
+            modified = max(modified, file.modified)
         }
         return SkillContent(files: files, modified: modified)
+    }
+
+    /// Every regular file under `folder` with its path relative to it, leaving out `.git` and `.DS_Store`.
+    static func regularFiles(in folder: URL) -> [(path: String, url: URL, modified: Date)] {
+        // The path-based enumerator yields relative paths directly; rebuilding them from absolute URLs
+        // breaks when the same folder shows up as both /var/… and /private/var/….
+        guard let enumerator = FileManager.default.enumerator(atPath: folder.path) else { return [] }
+        var files: [(String, URL, Date)] = []
+        while let path = enumerator.nextObject() as? String {
+            if ignoredNames.contains((path as NSString).lastPathComponent) {
+                enumerator.skipDescendants()
+                continue
+            }
+            guard enumerator.fileAttributes?[.type] as? FileAttributeType == .typeRegular else { continue }
+            let modified = enumerator.fileAttributes?[.modificationDate] as? Date ?? .distantPast
+            files.append((path, folder.appendingPathComponent(path), modified))
+        }
+        return files
     }
 
     /// The `description:` from SKILL.md's front matter as one line of plain text.
