@@ -13,15 +13,19 @@ final class SkillsWindowController: NSObject, NSWindowDelegate {
     init(appState: AppState, preferences: Preferences, onClose: @escaping () -> Void) {
         model = SkillsViewModel(appState: appState)
         window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 680, height: 600),
-            styleMask: [.titled, .closable, .resizable],
+            contentRect: NSRect(x: 0, y: 0, width: 720, height: 560),
+            styleMask: [.titled, .closable, .resizable, .miniaturizable],
             backing: .buffered,
             defer: false
         )
+        let hosting = NSHostingController(rootView: SkillsView(model: model, preferences: preferences))
+        // Let the user size the window; by default the hosting controller pins it to the content's ideal size.
+        hosting.sizingOptions = []
+        window.contentViewController = hosting
         window.isReleasedWhenClosed = false
-        window.contentMinSize = NSSize(width: 560, height: 420)
-        window.contentViewController = NSHostingController(rootView: SkillsView(model: model, preferences: preferences))
-        window.setContentSize(NSSize(width: 680, height: 600))
+        window.contentMinSize = NSSize(width: 600, height: 420)
+        window.setContentSize(NSSize(width: 720, height: 560))
+        window.setFrameAutosaveName("im.skills")
         self.onClose = onClose
         super.init()
         window.delegate = self
@@ -32,7 +36,7 @@ final class SkillsWindowController: NSObject, NSWindowDelegate {
     }
 
     func show() {
-        if !window.isVisible { window.center() }
+        if !window.isVisible, !window.setFrameUsingName("im.skills") { window.center() }
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
     }
@@ -42,110 +46,172 @@ final class SkillsWindowController: NSObject, NSWindowDelegate {
     }
 }
 
+/// Column widths shared by the header and every row, so the agent columns line up.
+private enum Column {
+    static let check: CGFloat = 18
+    static let agent: CGFloat = 96
+    static let trailing: CGFloat = 24
+    static let spacing: CGFloat = 12
+    static let inset: CGFloat = 20
+}
+
 struct SkillsView: View {
     @ObservedObject var model: SkillsViewModel
     @ObservedObject var preferences: Preferences
 
+    private var accent: Color { Color(nsColor: preferences.cat.accentColor) }
+    /// Darker, so white button text stays readable on light cat colors.
+    private var strongAccent: Color { Color(nsColor: preferences.cat.accentColor.blended(withFraction: 0.22, of: .black) ?? .controlAccentColor) }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            header.padding(20)
+        VStack(spacing: 0) {
+            header
+            if let warning = model.syncWarning {
+                Label(warning, systemImage: "icloud.slash")
+                    .font(.callout)
+                    .foregroundStyle(.orange)
+                    .lineLimit(2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, Column.inset)
+                    .padding(.bottom, 10)
+            }
             Divider()
             content
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .tint(accent)
             Divider()
-            footer.padding(16)
+            footer
         }
-        // Rows read their text through L(), which SwiftUI can't track; rebuild them on a language switch.
+        .frame(minWidth: 600, minHeight: 420)
+        .background(Color(nsColor: .windowBackgroundColor))
+        // Text comes from L(), which SwiftUI can't track; rebuild everything on a language switch.
         .id(preferences.language)
     }
 
+    // MARK: Header
+
     private var header: some View {
-        HStack(alignment: .top, spacing: 14) {
+        HStack(spacing: 14) {
             Image(nsImage: preferences.cat.image(pointSize: 2))
-            VStack(alignment: .leading, spacing: 4) {
-                Text(L("Skills", "Skills")).font(.title2.bold())
-                Text(L("Personal skills from Claude Code and Codex. Linked skills live once in your im repository and are shared by the agents you pick. Skills you don't link stay where they are.",
-                       "这里列出 Claude Code 和 Codex 的个人 Skills。关联后的 Skill 只在 im 仓库里保存一份，并共享给你勾选的 Agent；不关联的 Skill 保持原样。"))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(L("Skills", "Skills")).font(.title3.weight(.semibold))
+                Text(L("Choose which skills im keeps in your repository, and which agents get them.",
+                       "选择哪些 Skill 交给 im 保管，以及装到哪些 Agent。"))
+                    .font(.callout)
                     .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
             }
             Spacer()
-            Button {
-                Task { await model.reload() }
-            } label: {
-                Label(L("Reload", "重新加载"), systemImage: "arrow.clockwise")
+            if model.isWorking {
+                ProgressView().controlSize(.small).frame(width: 24)
+            } else {
+                Button { Task { await model.reload() } } label: {
+                    Image(systemName: "arrow.clockwise").font(.body.weight(.medium))
+                }
+                .buttonStyle(.borderless)
+                .foregroundStyle(.secondary)
+                .help(L("Reload: sync with GitHub and scan the agents again", "重新加载：与 GitHub 同步，并重新扫描各个 Agent"))
+                .frame(width: 24)
             }
-            .disabled(model.isWorking)
         }
+        .padding(.horizontal, Column.inset)
+        .padding(.vertical, 16)
     }
+
+    // MARK: List
 
     @ViewBuilder
     private var content: some View {
         if !model.hasScanned {
-            ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+            ProgressView()
         } else if model.skills.isEmpty {
-            Text(L("No personal skills found in Claude Code or Codex.", "在 Claude Code 和 Codex 里没有找到个人 Skills。"))
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            VStack(spacing: 10) {
+                Image(nsImage: preferences.cat.image(blinking: true, pointSize: 3))
+                Text(L("No personal skills in Claude Code or Codex yet.", "Claude Code 和 Codex 里还没有个人 Skill。"))
+                    .font(.headline)
+                Text(L("Skills you add to ~/.claude/skills or ~/.agents/skills show up here when you reload.",
+                       "放进 ~/.claude/skills 或 ~/.agents/skills 的 Skill，重新加载后就会出现在这里。"))
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+            .padding(40)
         } else {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    if !model.unlinked.isEmpty {
-                        section(L("Not linked", "未关联"), count: model.unlinked.count) {
-                            HStack(spacing: 8) {
-                                Button(L("Select All", "全选")) { model.selectAll(true) }
-                                Button(L("Select None", "全不选")) { model.selectAll(false) }
+            VStack(spacing: 0) {
+                columnHeader
+                Divider()
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
+                        if !model.unlinked.isEmpty {
+                            Section {
+                                rows(model.unlinked)
+                            } header: {
+                                sectionHeader(L("Not linked", "未关联"), count: model.unlinked.count)
                             }
-                            .buttonStyle(.link)
-                            .font(.callout)
                         }
-                        ForEach(model.unlinked) { skill in
-                            SkillRow(skill: skill, choice: choice(for: skill), isSkipped: model.skipped.contains(skill.name))
-                        }
-                    }
-                    if !model.linked.isEmpty {
-                        section(L("Linked", "已关联"), count: model.linked.count) { EmptyView() }
-                        ForEach(model.linked) { skill in
-                            SkillRow(skill: skill, choice: choice(for: skill), isSkipped: false)
+                        if !model.linked.isEmpty {
+                            Section {
+                                rows(model.linked)
+                            } header: {
+                                sectionHeader(L("Linked", "已关联"), count: model.linked.count)
+                            }
                         }
                     }
                 }
-                .padding(20)
             }
         }
     }
 
-    private func section(_ title: String, count: Int, @ViewBuilder accessory: () -> some View) -> some View {
-        HStack {
-            Text("\(title) · \(count)").font(.headline)
+    private var columnHeader: some View {
+        HStack(spacing: Column.spacing) {
+            if model.unlinked.isEmpty {
+                Color.clear.frame(width: Column.check, height: 1)
+            } else {
+                Button { model.selectAll(model.selectionState != true) } label: {
+                    Image(systemName: selectAllSymbol)
+                    .font(.body)
+                    .foregroundStyle(model.selectionState == false ? AnyShapeStyle(.secondary) : AnyShapeStyle(accent))
+                }
+                .buttonStyle(.plain)
+                .frame(width: Column.check)
+                .help(L("Select all or none of the skills that aren't linked", "全选或全不选未关联的 Skill"))
+            }
+            Text(L("Skill", "Skill")).frame(maxWidth: .infinity, alignment: .leading)
+            ForEach(SkillAgent.allCases, id: \.self) { agent in
+                Text(agent.displayName).frame(width: Column.agent)
+            }
+            Color.clear.frame(width: Column.trailing, height: 1)
+        }
+        .font(.caption.weight(.medium))
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, Column.inset)
+        .padding(.vertical, 7)
+    }
+
+    private var selectAllSymbol: String {
+        switch model.selectionState {
+        case true: "checkmark.square.fill"
+        case false: "square"
+        case nil: "minus.square.fill"
+        }
+    }
+
+    private func sectionHeader(_ title: String, count: Int) -> some View {
+        HStack(spacing: 6) {
+            Text(title).fontWeight(.semibold)
+            Text("\(count)").foregroundStyle(.secondary)
             Spacer()
-            accessory()
         }
+        .font(.subheadline)
+        .padding(.horizontal, Column.inset)
+        .padding(.top, 14)
+        .padding(.bottom, 6)
+        .background(Color(nsColor: .windowBackgroundColor))
     }
 
-    private var footer: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            if let warning = model.syncWarning {
-                Label(warning, systemImage: "exclamationmark.icloud").foregroundStyle(.orange).font(.callout).lineLimit(3)
-            }
-            if let error = model.errorMessage {
-                Label(error, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.red).font(.callout).textSelection(.enabled)
-            }
-            if let result = model.resultMessage {
-                Label(result, systemImage: "checkmark.circle.fill").foregroundStyle(.green).font(.callout)
-            }
-            HStack {
-                Text(L("Replaced folders are kept in ~/.im/backup.", "被替换的文件夹会保存在 ~/.im/backup。"))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Spacer()
-                if model.isWorking { ProgressView().controlSize(.small) }
-                Button(L("Not Now", "暂不关联"), action: model.notNow)
-                    .disabled(model.isWorking)
-                Button(L("Apply", "应用"), action: model.apply)
-                    .buttonStyle(.borderedProminent)
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(!model.hasChanges || model.isWorking)
-            }
+    private func rows(_ skills: [Skill]) -> some View {
+        ForEach(skills) { skill in
+            SkillRow(skill: skill, choice: choice(for: skill), isSkipped: model.skipped.contains(skill.name), accent: accent)
+            Divider().padding(.leading, Column.inset + Column.check + Column.spacing)
         }
     }
 
@@ -155,105 +221,186 @@ struct SkillsView: View {
             set: { model.choices[skill.name] = $0 }
         )
     }
+
+    // MARK: Footer
+
+    private var footer: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if let error = model.errorMessage {
+                Label(error, systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.red)
+                    .textSelection(.enabled)
+            } else if let result = model.resultMessage {
+                Label(result, systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+            }
+            HStack(spacing: 10) {
+                Text(L("Replaced folders are moved to ~/.im/backup, never deleted.", "被替换的文件夹会移到 ~/.im/backup，不会删除。"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button(L("Not Now", "暂不关联"), action: model.notNow)
+                    .keyboardShortcut(.cancelAction)
+                    .disabled(model.isWorking)
+                Button(model.applyTitle, action: model.apply)
+                    .buttonStyle(.borderedProminent)
+                    .tint(strongAccent)
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(!model.hasChanges || model.isWorking)
+            }
+        }
+        .font(.callout)
+        .padding(.horizontal, Column.inset)
+        .padding(.vertical, 14)
+    }
 }
 
 private struct SkillRow: View {
     let skill: Skill
     @Binding var choice: SkillsViewModel.Choice
     let isSkipped: Bool
+    let accent: Color
 
     private var isLinked: Bool { skill.state == .linked }
-    private var isActive: Bool { isLinked ? !choice.unlink : choice.link }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 10) {
-            if !isLinked {
-                Toggle("", isOn: $choice.link).labelsHidden().toggleStyle(.checkbox)
+        HStack(alignment: .top, spacing: Column.spacing) {
+            Group {
+                if isLinked {
+                    Color.clear.frame(height: 1)
+                } else {
+                    Toggle("", isOn: $choice.link).toggleStyle(.checkbox).labelsHidden()
+                }
             }
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 8) {
-                    Text(skill.name).font(.body.monospaced().bold())
-                    StateBadge(state: skill.state, unlinking: choice.unlink)
-                    if isSkipped {
-                        Text(L("Skipped", "已跳过")).font(.caption).foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    if isLinked {
-                        Button(choice.unlink ? L("Keep Linked", "保持关联") : L("Unlink", "取消关联")) { choice.unlink.toggle() }
-                            .controlSize(.small)
-                    }
+            .frame(width: Column.check)
+
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
+                    Text(skill.name).font(.system(.body, design: .monospaced).weight(.medium))
+                    badge
                 }
                 if let description = skill.description {
-                    Text(description).font(.callout).foregroundStyle(.secondary).lineLimit(2)
+                    Text(description)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                        .help(description)
                 }
-                HStack(spacing: 16) {
-                    Text(foundIn).font(.caption).foregroundStyle(.secondary)
-                    Spacer()
-                    Text(L("Install in", "安装到")).font(.caption).foregroundStyle(.secondary)
-                    ForEach(SkillAgent.allCases, id: \.self) { agent in
-                        Toggle(agent.displayName, isOn: agentBinding(agent))
-                            .toggleStyle(.checkbox)
+                if skill.state == .differentVersions {
+                    if choice.link {
+                        VersionPicker(skill: skill, selection: $choice.version)
+                            .padding(.top, 6)
+                    } else {
+                        Text(L("The copies differ. Tick it to choose which version to keep.", "各处的内容不一样，勾选后选择要保留的版本。"))
                             .font(.caption)
+                            .foregroundStyle(.orange)
                     }
                 }
-                .disabled(!isActive)
-                if skill.state == .differentVersions {
-                    VersionPicker(skill: skill, selection: $choice.version)
-                        .disabled(!choice.link)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            ForEach(SkillAgent.allCases, id: \.self) { agent in
+                AgentCell(agent: agent, skill: skill, choice: $choice, accent: accent)
+                    .frame(width: Column.agent)
+            }
+
+            Group {
+                if isLinked {
+                    Menu {
+                        Button(choice.unlink ? L("Keep Linked", "保持关联") : L("Unlink…", "取消关联…")) { choice.unlink.toggle() }
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                    }
+                    .menuStyle(.borderlessButton)
+                    .tint(.secondary)
+                    .menuIndicator(.hidden)
+                    .help(L("More", "更多"))
+                } else {
+                    Color.clear.frame(height: 1)
                 }
             }
+            .frame(width: Column.trailing)
         }
-        .padding(12)
-        .background(RoundedRectangle(cornerRadius: 8).fill(Color(nsColor: .controlBackgroundColor)))
-        .opacity(isActive || !isLinked ? 1 : 0.6)
+        .padding(.horizontal, Column.inset)
+        .padding(.vertical, 10)
+        .opacity(choice.unlink ? 0.55 : 1)
+        .animation(.easeOut(duration: 0.15), value: choice)
     }
 
-    private var foundIn: String {
-        let places = skill.installedAgents.sorted().map(\.displayName) + (skill.repositoryCopy != nil ? ["im"] : [])
-        return L("Found in: ", "所在位置：") + places.joined(separator: " · ")
-    }
-
-    private func agentBinding(_ agent: SkillAgent) -> Binding<Bool> {
-        Binding(
-            get: { choice.agents.contains(agent) },
-            set: { on in
-                if on { choice.agents.insert(agent) } else { choice.agents.remove(agent) }
-            }
-        )
+    @ViewBuilder
+    private var badge: some View {
+        if choice.unlink {
+            Badge(text: L("Will unlink", "将取消关联"), color: .secondary)
+        } else if skill.state == .differentVersions {
+            Badge(text: L("Different versions", "版本不同"), color: .orange)
+        } else if skill.state == .onlyInIM {
+            Badge(text: L("From another machine", "来自另一台电脑"), color: .secondary)
+        } else if isSkipped {
+            Text(L("Skipped", "已跳过")).font(.caption).foregroundStyle(.tertiary)
+        }
     }
 }
 
-private struct StateBadge: View {
-    let state: Skill.State
-    let unlinking: Bool
+/// One agent column of a row. Untouched rows show where the skill is now;
+/// rows being changed show where it will be, with + / − for what changes.
+private struct AgentCell: View {
+    let agent: SkillAgent
+    let skill: Skill
+    @Binding var choice: SkillsViewModel.Choice
+    let accent: Color
+
+    private var isLinked: Bool { skill.state == .linked }
+    private var isEditable: Bool { isLinked ? !choice.unlink : choice.link }
+    private var isHere: Bool { (isLinked ? skill.linkedAgents : skill.installedAgents).contains(agent) }
+    private var willBeHere: Bool { isEditable ? choice.agents.contains(agent) : isHere }
 
     var body: some View {
-        Text(title)
-            .font(.caption2.bold())
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .background(Capsule().fill(color.opacity(0.18)))
+        ZStack {
+            Button {
+                if willBeHere { choice.agents.remove(agent) } else { choice.agents.insert(agent) }
+            } label: {
+                // A quiet mark rather than a checkbox: the row's checkbox is the decision, these are its details.
+                Image(systemName: willBeHere ? "checkmark" : "circle")
+                    .font(willBeHere ? .body.weight(.semibold) : .caption)
+                    .foregroundStyle(willBeHere ? (isEditable ? AnyShapeStyle(.primary) : AnyShapeStyle(.tertiary)) : AnyShapeStyle(.quaternary))
+                    .frame(width: 22, height: 18)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(!isEditable)
+            .accessibilityLabel(agent.displayName)
+            .accessibilityValue(willBeHere ? L("On", "开") : L("Off", "关"))
+
+            Group {
+                if isEditable, willBeHere, !isHere {
+                    Image(systemName: "plus.circle.fill").foregroundStyle(accent)
+                        .help(L("Will be added to \(agent.displayName)", "将新增到 \(agent.displayName)"))
+                } else if isEditable, !willBeHere, isHere {
+                    Image(systemName: "minus.circle.fill").foregroundStyle(.secondary)
+                        .help(L("Will be removed from \(agent.displayName); the folder goes to the backup", "将从 \(agent.displayName) 移除，文件夹会移到备份"))
+                } else {
+                    Color.clear
+                }
+            }
+            .font(.caption)
+            .frame(width: 12, height: 12)
+            // Beside the mark, so the mark itself stays centered under the column title.
+            .offset(x: 20)
+        }
+        .help(isEditable ? "" : (isHere ? L("In \(agent.displayName) now", "当前在 \(agent.displayName) 中") : L("Not in \(agent.displayName)", "不在 \(agent.displayName) 中")))
+    }
+}
+
+private struct Badge: View {
+    let text: String
+    let color: Color
+
+    var body: some View {
+        Text(text)
+            .font(.caption.weight(.medium))
             .foregroundStyle(color)
-    }
-
-    private var title: String {
-        if unlinking { return L("Will unlink", "将取消关联") }
-        switch state {
-        case .linked: return L("Linked", "已关联")
-        case .notLinked: return L("Not linked", "未关联")
-        case .differentVersions: return L("Different versions", "版本不同")
-        case .onlyInIM: return L("From im", "来自 im")
-        }
-    }
-
-    private var color: Color {
-        if unlinking { return .secondary }
-        switch state {
-        case .linked: return .green
-        case .notLinked: return .secondary
-        case .differentVersions: return .orange
-        case .onlyInIM: return .blue
-        }
+            .padding(.horizontal, 6)
+            .padding(.vertical, 1)
+            .overlay(Capsule().strokeBorder(color.opacity(0.5), lineWidth: 1))
     }
 }
 
@@ -262,8 +409,8 @@ private struct VersionPicker: View {
     @Binding var selection: SkillVersion.ID?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(L("The copies differ. Keep:", "各处的内容不一样，保留哪个版本：")).font(.caption.bold())
+        VStack(alignment: .leading, spacing: 6) {
+            Text(L("Keep which version?", "保留哪个版本？")).font(.caption.weight(.semibold))
             Picker("", selection: $selection) {
                 ForEach(skill.versions) { version in
                     Text(describe(version)).tag(Optional(version.id))
@@ -271,19 +418,21 @@ private struct VersionPicker: View {
             }
             .pickerStyle(.radioGroup)
             .labelsHidden()
-            .font(.caption)
-            Text(L("Different files: ", "不同的文件：") + skill.differingFiles.joined(separator: ", "))
-                .font(.caption)
+            Text(L("Differs in \(skill.differingFiles.joined(separator: ", ")). The other version goes to the backup.",
+                   "不同的文件：\(skill.differingFiles.joined(separator: "、"))。另一个版本会移到备份。"))
                 .foregroundStyle(.secondary)
         }
-        .padding(8)
-        .background(RoundedRectangle(cornerRadius: 6).fill(Color.orange.opacity(0.08)))
+        .font(.caption)
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 6).fill(Color.orange.opacity(0.07)))
     }
 
     private func describe(_ version: SkillVersion) -> String {
-        let owners = version.owners.map { $0?.displayName ?? "im" }.joined(separator: " · ")
-        let date = version.content.modified.formatted(date: .abbreviated, time: .shortened)
-        let files = version.content.files.count
-        return L("\(owners) — modified \(date), \(files) files", "\(owners) — 修改于 \(date)，\(files) 个文件")
+        let owners = version.owners.map { $0?.displayName ?? "im" }.joined(separator: L(" and ", " 和 "))
+        let date = version.content.modified.formatted(
+            Date.FormatStyle(date: .abbreviated, time: .shortened).locale(Locale(identifier: Language.current.rawValue))
+        )
+        return L("\(owners), edited \(date)", "\(owners)，修改于 \(date)")
     }
 }

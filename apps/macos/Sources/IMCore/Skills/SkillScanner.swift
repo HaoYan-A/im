@@ -77,21 +77,24 @@ public enum SkillScanner {
         return SkillContent(files: files, modified: modified)
     }
 
-    /// The `description:` from SKILL.md's front matter.
+    /// The `description:` from SKILL.md's front matter as one line of plain text.
     static func description(of folder: URL) -> String? {
         guard let text = try? String(contentsOf: folder.appendingPathComponent("SKILL.md"), encoding: .utf8) else { return nil }
         let lines = text.components(separatedBy: .newlines)
         guard lines.first?.trimmingCharacters(in: .whitespaces) == "---" else { return nil }
-        for line in lines.dropFirst() {
-            if line.trimmingCharacters(in: .whitespaces) == "---" { break }
-            guard line.hasPrefix("description:") else { continue }
-            var value = line.dropFirst("description:".count).trimmingCharacters(in: .whitespaces)
-            if value.count >= 2, let first = value.first, first == value.last, first == "\"" || first == "'" {
-                value = String(value.dropFirst().dropLast())
-            }
-            return value.isEmpty || value == ">" || value == "|" ? nil : value
+        let frontMatter = lines.dropFirst().prefix { $0.trimmingCharacters(in: .whitespaces) != "---" }
+        guard let index = frontMatter.firstIndex(where: { $0.hasPrefix("description:") }) else { return nil }
+
+        var value = frontMatter[index].dropFirst("description:".count).trimmingCharacters(in: .whitespaces)
+        if [">", "|", ">-", "|-", ">+", "|+"].contains(value) {
+            // Block scalar: the indented lines that follow.
+            value = frontMatter[(index + 1)...].prefix { $0.first == " " || $0.first == "\t" || $0.isEmpty }.joined(separator: " ")
+        } else if value.count >= 2, let first = value.first, first == value.last, first == "\"" || first == "'" {
+            value = String(value.dropFirst().dropLast())
+            if first == "\"" { value = value.replacingOccurrences(of: "\\n", with: " ").replacingOccurrences(of: "\\\"", with: "\"") }
         }
-        return nil
+        let collapsed = value.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        return collapsed.isEmpty ? nil : collapsed
     }
 }
 

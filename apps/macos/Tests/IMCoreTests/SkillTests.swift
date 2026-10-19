@@ -44,6 +44,15 @@ final class SkillTests: XCTestCase {
         XCTAssertEqual(skills.map(\.state), [.notLinked, .notLinked, .notLinked])
     }
 
+    func testDescriptionIsOneCleanLine() throws {
+        try makeSkill("escaped", in: claude, description: #""Find code.\n- Use it when lost.""#)
+        try makeSkill("folded", in: claude, description: ">\n  Folded text\n  over two lines.")
+        let skills = SkillScanner.scan(environment)
+
+        XCTAssertEqual(skill("escaped", in: skills).description, "Find code. - Use it when lost.")
+        XCTAssertEqual(skill("folded", in: skills).description, "Folded text over two lines.")
+    }
+
     func testIdenticalCopiesMergeAndDifferentCopiesConflict() throws {
         try makeSkill("same", in: claude, body: "A")
         try makeSkill("same", in: codex, body: "A")

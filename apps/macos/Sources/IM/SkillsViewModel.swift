@@ -26,7 +26,6 @@ final class SkillsViewModel: ObservableObject {
     var close: () -> Void = {}
 
     private let appState: AppState
-    private var initial: [String: Choice] = [:]
 
     init(appState: AppState) {
         self.appState = appState
@@ -38,7 +37,22 @@ final class SkillsViewModel: ObservableObject {
     /// Unlinked skills the user hasn't skipped; launch only opens the window for these.
     var pending: [Skill] { unlinked.filter { !skipped.contains($0.name) } }
 
+    /// The primary button: what Apply will do, in words.
+    var applyTitle: String {
+        let changes = changes
+        if !changes.isEmpty, changes.allSatisfy({ if case .link = $0.action { true } else { false } }) {
+            return L("Link \(changes.count) Skills", "关联 \(changes.count) 个 Skill")
+        }
+        return changes.isEmpty ? L("Apply", "应用") : L("Apply \(changes.count) Changes", "应用 \(changes.count) 项更改")
+    }
+
     var hasChanges: Bool { !changes.isEmpty }
+
+    /// All, none or some of the unlinked skills are ticked.
+    var selectionState: Bool? {
+        let ticked = unlinked.filter { choices[$0.name]?.link == true }.count
+        return ticked == 0 ? false : (ticked == unlinked.count ? true : nil)
+    }
 
     func selectAll(_ selected: Bool) {
         for skill in unlinked {
@@ -49,22 +63,24 @@ final class SkillsViewModel: ObservableObject {
     // MARK: Reload
 
     /// Syncs linked skills with GitHub, then scans. Sync problems (e.g. offline) don't stop the scan.
-    func reload() async {
+    func reload(sync shouldSync: Bool = true) async {
         guard let context = context() else { return }
         isWorking = true
         errorMessage = nil
         defer { isWorking = false }
 
-        let sync = context.sync
-        let warning: String? = await Task.detached {
-            do {
-                try sync.commitAndSync(["skills", ".im"], message: "chore(im): sync skills")
-                return nil
-            } catch {
-                return error.localizedDescription
-            }
-        }.value
-        syncWarning = warning.map { L("Could not sync with GitHub: \($0)", "无法与 GitHub 同步：\($0)") }
+        if shouldSync {
+            let sync = context.sync()
+            let warning: String? = await Task.detached {
+                do {
+                    try sync.commitAndSync(["skills", ".im"], message: "chore(im): sync skills")
+                    return nil
+                } catch {
+                    return error.localizedDescription
+                }
+            }.value
+            syncWarning = warning.map { L("Could not sync with GitHub: \($0)", "无法与 GitHub 同步：\($0)") }
+        }
 
         let environment = context.environment
         let scanned = await Task.detached { SkillScanner.scan(environment) }.value
@@ -87,7 +103,6 @@ final class SkillsViewModel: ObservableObject {
             }
         }
         self.choices = choices
-        initial = choices
         hasScanned = true
     }
 
@@ -95,7 +110,7 @@ final class SkillsViewModel: ObservableObject {
 
     private var changes: [SkillChange] {
         skills.compactMap { skill in
-            guard let choice = choices[skill.name], choice != initial[skill.name] else { return nil }
+            guard let choice = choices[skill.name] else { return nil }
             switch skill.state {
             case .linked:
                 if choice.unlink { return SkillChange(skill: skill, action: .unlink) }
@@ -126,13 +141,15 @@ final class SkillsViewModel: ObservableObject {
             do {
                 let names = changes.map(\.skill.name).joined(separator: ", ")
                 let linker = SkillLinker(environment: context.environment)
-                let sync = context.sync
+                let sync = context.sync()
                 try await Task.detached {
                     try linker.apply(changes)
                     try sync.commitAndSync(["skills", ".im"], message: "chore(im): update skills \(names)")
                 }.value
-                resultMessage = L("Updated \(changes.count) skills. Agents pick them up in new sessions.",
-                                  "已更新 \(changes.count) 个 Skill，Agent 在新会话里就能用上。")
+                let allLinks = changes.allSatisfy { if case .link = $0.action { true } else { false } }
+                resultMessage = allLinks
+                    ? L("Linked \(changes.count) skills. Agents pick them up in new sessions.", "已关联 \(changes.count) 个 Skill，Agent 开新会话就能用。")
+                    : L("Applied \(changes.count) changes. Agents pick them up in new sessions.", "已应用 \(changes.count) 项更改，Agent 开新会话就能用。")
             } catch {
                 errorMessage = error.localizedDescription
             }
@@ -165,13 +182,14 @@ final class SkillsViewModel: ObservableObject {
         }
     }
 
-    private func context() -> (environment: SkillEnvironment, sync: RepoSync)? {
+    /// The skill folders, plus git access built on demand so scanning alone never touches the Keychain.
+    private func context() -> (environment: SkillEnvironment, sync: () -> RepoSync)? {
         guard let connection = appState.connection else { return nil }
         let owner = connection.fullName.split(separator: "/").first.map(String.init) ?? "im"
         let identity = connection.identity ?? GitIdentity(name: owner, email: "\(owner)@users.noreply.github.com")
         return (
             SkillEnvironment.live(repository: connection.localPath),
-            RepoSync(repository: connection.localPath, git: Git(token: TokenStore.load()), identity: identity)
+            { RepoSync(repository: connection.localPath, git: Git(token: TokenStore.load()), identity: identity) }
         )
     }
 }

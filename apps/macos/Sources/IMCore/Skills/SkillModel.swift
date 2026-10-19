@@ -49,8 +49,16 @@ public struct SkillEnvironment: Sendable {
     }
 
     public static func live(repository: URL) -> SkillEnvironment {
-        SkillEnvironment(
-            home: FileManager.default.homeDirectoryForCurrentUser,
+        var home = FileManager.default.homeDirectoryForCurrentUser
+        var repository = repository
+        #if DEBUG
+        // Lets design review render the Skills window against fixture folders.
+        let overrides = ProcessInfo.processInfo.environment
+        if let path = overrides["IM_DEBUG_HOME"] { home = URL(fileURLWithPath: path) }
+        if let path = overrides["IM_DEBUG_REPO"] { repository = URL(fileURLWithPath: path) }
+        #endif
+        return SkillEnvironment(
+            home: home,
             repository: repository,
             backups: IMPaths.home.appendingPathComponent("backup/skills", isDirectory: true)
         )

@@ -1,4 +1,5 @@
 import AppKit
+import IMCore
 
 @main
 @MainActor
@@ -30,12 +31,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             showConnectWindow: { [weak self] in self?.showConnectWindow() },
             showSkillsWindow: { [weak self] in self?.showSkillsWindow() }
         )
+        #if DEBUG
+        if let path = ProcessInfo.processInfo.environment["IM_SNAPSHOT_SKILLS"] {
+            return snapshotSkillsWindow(to: path)
+        }
+        #endif
         if appState.connection == nil {
             showConnectWindow()
         } else {
             offerSkills()
         }
     }
+
+    #if DEBUG
+    /// Design review aid: renders the Skills window to a PNG and quits. No screen-recording permission needed.
+    private func snapshotSkillsWindow(to path: String) {
+        if ProcessInfo.processInfo.environment["IM_SNAPSHOT_DARK"] != nil { NSApp.appearance = NSAppearance(named: .darkAqua) }
+        if ProcessInfo.processInfo.environment["IM_SNAPSHOT_ENGLISH"] != nil { Language.current = .english }
+        let controller = makeSkillsWindow()
+        skillsWindow = controller
+        controller.show()
+        Task {
+            await controller.model.reload(sync: false)
+            if ProcessInfo.processInfo.environment["IM_SNAPSHOT_SELECT_ALL"] != nil { controller.model.selectAll(true) }
+            try? await Task.sleep(nanoseconds: 800_000_000)
+            if let view = NSApp.keyWindow?.contentView ?? NSApp.windows.first(where: \.isVisible)?.contentView,
+               let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
+                view.cacheDisplay(in: view.bounds, to: bitmap)
+                try? bitmap.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: path))
+            }
+            NSApp.terminate(nil)
+        }
+    }
+    #endif
 
     private func showConnectWindow() {
         if connectWindow == nil {
