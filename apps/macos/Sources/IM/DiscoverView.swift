@@ -181,7 +181,14 @@ struct DiscoverView: View {
             guard (1...6).contains(level), line.dropFirst(level).first == " " else { return line }
             return "**\(line.dropFirst(level + 1).trimmingCharacters(in: .whitespaces))**"
         }.joined(separator: "\n")
-        return (try? AttributedString(markdown: headings, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)))
+        var rendered = (try? AttributedString(markdown: headings, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)))
             ?? AttributedString(text)
+        // SKILL.md is third-party text: keep web links clickable, but never file:// or app URL schemes.
+        for run in rendered.runs {
+            if let url = run.link, !["http", "https"].contains(url.scheme?.lowercased() ?? "") {
+                rendered[run.range].link = nil
+            }
+        }
+        return rendered
     }
 }
