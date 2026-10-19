@@ -48,6 +48,18 @@ If you use more than one AI agent (Claude Code, Codex, Cursor, Gemini CLI, Copil
 
 Because the backend is plain Git, you get versioning, diffs, rollback, offline use and full ownership of your data for free — no extra server, no vendor lock-in.
 
+## ⚠️ Security: keep your repository private
+
+> [!WARNING]
+> **Your `im` repository must always be private. Never make it public.**
+>
+> The data `im` syncs is personal and often sensitive. MCP server configs in particular frequently contain API keys and access tokens (for example in their `env` fields), and these are stored in the repository as-is.
+>
+> - Only connect `im` to a **private** repository, and never change its visibility to public.
+> - Be careful when adding collaborators — anyone with access can read everything in it, including secrets.
+> - Anything committed stays in Git history. Deleting a file later does **not** remove a leaked secret; if one is ever exposed, revoke and rotate it immediately.
+> - Protect the GitHub account and token that `im` uses (enable 2FA).
+
 ## What gets managed
 
 | Kind        | Examples                                                        |
