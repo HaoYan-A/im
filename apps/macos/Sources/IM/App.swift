@@ -22,6 +22,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: StatusItemController?
     private var connectWindow: ConnectWindowController?
     private var skillsWindow: SkillsWindowController?
+    private var skillsTimer: Timer?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.mainMenu = Self.makeMainMenu()
@@ -29,8 +30,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             appState: appState,
             preferences: preferences,
             showConnectWindow: { [weak self] in self?.showConnectWindow() },
-            showSkillsWindow: { [weak self] in self?.showSkillsWindow() }
+            showSkillsWindow: { [weak self] tab in self?.showSkillsWindow(tab: tab) }
         )
+        // Launch already checks (offerSkills); after that, look for upstream skill updates every 6 hours.
+        skillsTimer = Timer.scheduledTimer(withTimeInterval: 6 * 60 * 60, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.maintainSkills() }
+        }
         #if DEBUG
         if let path = ProcessInfo.processInfo.environment["IM_SNAPSHOT_SKILLS"] {
             return snapshotSkillsWindow(to: path)
@@ -52,8 +57,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         skillsWindow = controller
         controller.show()
         Task {
-            await controller.model.reload(sync: false)
-            if ProcessInfo.processInfo.environment["IM_SNAPSHOT_SELECT_ALL"] != nil { controller.model.selectAll(true) }
+            let environment = ProcessInfo.processInfo.environment
+            await controller.model.reload(sync: environment["IM_SNAPSHOT_MAINTAIN"] != nil)
+            if environment["IM_SNAPSHOT_SELECT_ALL"] != nil { controller.model.selectAll(true) }
+            if let query = environment["IM_SNAPSHOT_DISCOVER"] {
+                controller.model.tab = .discover
+                controller.discover.query = query
+                try? await Task.sleep(nanoseconds: 4_000_000_000)
+            }
             try? await Task.sleep(nanoseconds: 800_000_000)
             if let view = NSApp.keyWindow?.contentView ?? NSApp.windows.first(where: \.isVisible)?.contentView,
                let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
@@ -75,12 +86,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         connectWindow?.show()
     }
 
-    /// Opens the Skills window and reloads it.
-    private func showSkillsWindow() {
+    /// Opens the Skills window on `tab` and reloads it.
+    private func showSkillsWindow(tab: SkillsViewModel.Tab = .installed) {
         let controller = skillsWindow ?? makeSkillsWindow()
         skillsWindow = controller
+        controller.model.tab = tab
         controller.show()
         Task { await controller.model.reload() }
+    }
+
+    /// Syncs skills and applies upstream updates, in the open Skills window or in the background.
+    private func maintainSkills() {
+        if let controller = skillsWindow {
+            Task { await controller.model.reload() }
+            return
+        }
+        guard let context = SkillsViewModel(appState: appState).context() else { return }
+        Task.detached {
+            let report = await SkillMaintenance.run(environment: context.environment, sync: context.sync(), upstream: context.upstream())
+            if !report.updated.isEmpty || report.syncError != nil {
+                NSLog("im: skills updated \(report.updated), sync error: \(report.syncError ?? "none")")
+            }
+        }
     }
 
     /// Scans in the background and opens the Skills window only if a skill is waiting for a decision.

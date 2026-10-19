@@ -34,6 +34,33 @@ public struct GitHubRepo: Decodable, Sendable, Identifiable, Hashable {
     }
 }
 
+/// A recursive listing from the git trees API.
+public struct GitTree: Decodable, Sendable {
+    public struct Entry: Decodable, Sendable, Equatable {
+        public let path: String
+        /// "blob" for files, "tree" for folders.
+        public let type: String
+        public let sha: String
+
+        public init(path: String, type: String, sha: String) {
+            self.path = path
+            self.type = type
+            self.sha = sha
+        }
+    }
+
+    public let sha: String
+    public let tree: [Entry]
+    /// GitHub cuts very large trees short.
+    public let truncated: Bool
+
+    public init(sha: String, tree: [Entry], truncated: Bool = false) {
+        self.sha = sha
+        self.tree = tree
+        self.truncated = truncated
+    }
+}
+
 public enum GitHubError: LocalizedError {
     case unauthorized
     case api(status: Int, message: String)
@@ -82,6 +109,20 @@ public struct GitHubClient: Sendable {
 
     public func repository(fullName: String) async throws -> GitHubRepo {
         try await send("GET", "repos/\(fullName)")
+    }
+
+    /// Every file and folder of a repository at `ref` (a branch, commit or tree SHA), recursively.
+    public func tree(_ repository: String, ref: String) async throws -> GitTree {
+        try await send("GET", "repos/\(repository)/git/trees/\(ref)", query: ["recursive": "1"])
+    }
+
+    public func blob(_ repository: String, sha: String) async throws -> Data {
+        struct Blob: Decodable { let content: String; let encoding: String }
+        let blob: Blob = try await send("GET", "repos/\(repository)/git/blobs/\(sha)")
+        guard blob.encoding == "base64", let data = Data(base64Encoded: blob.content, options: .ignoreUnknownCharacters) else {
+            throw GitHubError.api(status: 200, message: "unexpected blob encoding \(blob.encoding)")
+        }
+        return data
     }
 
     /// Creates an empty repository owned by the user. It is always private.

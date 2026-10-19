@@ -124,6 +124,16 @@ Run `apps/macos/scripts/create-dev-certificate.sh` once before your first build.
 - **Reload** (or **Skills…** in the menu) commits edits to linked skills, pulls what other machines added, pushes, and shows the list again.
 - Disconnecting or switching repositories first turns linked skills back into regular folders, so the agents keep working.
 
+#### Updates from skills.sh
+
+Linked skills can follow their upstream on [skills.sh](https://skills.sh), which is a folder in a GitHub repository:
+
+- Skills installed with `npx skills` are matched automatically through its lock file (`~/.agents/.skill-lock.json`). For other skills, **Find on skills.sh** looks them up by name and shows which candidates have exactly your files.
+- On launch, on reload and every 6 hours, `im` checks each source on GitHub. A skill you haven't edited is updated automatically, with the old version kept in `~/.im/backup/`. A skill you have edited is left alone and marked, so you can choose **Update Anyway** or **Stop Updating**.
+- The **Discover** tab searches skills.sh, previews a skill's `SKILL.md` straight from GitHub, and installs it into `im` for the agents you pick. It then stays up to date.
+
+Downloads and update checks use the GitHub API with your token. Search uses the same skills.sh endpoint as the `npx skills` CLI, because the documented skills.sh API only accepts Vercel OIDC tokens.
+
 > Linked skills point into the local clone under `~/.im/repos/`. Don't delete or move it while skills are linked; disconnect from the menu instead.
 
 ### Pick your cat
